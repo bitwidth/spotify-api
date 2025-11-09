@@ -9,7 +9,6 @@
     <div style="margin-bottom:1rem">
       <div v-if="!spotifyUserId">
         <small>Not connected</small>
-        <button @click="openLogin" style="margin-left:8px">Connect Spotify</button>
       </div>
       <div v-else>
         <small>Connected</small>
