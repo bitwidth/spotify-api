@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Spotify backend Lambda + API Gateway (SAM template)
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 30
+
+Resources:
+  SpotifyTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: spotify-tokens
+      AttributeDefinitions:
+        - AttributeName: spotifyUserId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: spotifyUserId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  AuthLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/auth.loginHandler
+      Environment:
+        Variables:
+          SPOTIFY_CLIENT_ID: !Ref SpotifyClientId
+          SPOTIFY_REDIRECT_URI: !Ref SpotifyRedirectUri
+      Events:
+        LoginApi:
+          Type: Api
+          Properties:
+            Path: /auth/spotify/login
+            Method: get
+            RestApiId: !Ref ServerlessRestApi
+
+  ServerlessRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "GET,POST,PUT,DELETE,OPTIONS"
+        AllowHeaders: "Content-Type,Authorization"
+        AllowOrigins: "*"
+
+  AuthCallbackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/auth.callbackHandler
+      Environment:
+        Variables:
+          SPOTIFY_CLIENT_ID: !Ref SpotifyClientId
+          SPOTIFY_CLIENT_SECRET: !Ref SpotifyClientSecret
+          SPOTIFY_REDIRECT_URI: !Ref SpotifyRedirectUri
+          FRONTEND_BASE_URL: !Ref FrontendBaseUrl
+          TOKENS_TABLE: !Ref SpotifyTokensTable
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource: !GetAtt SpotifyTokensTable.Arn
+      Events:
+        CallbackApi:
+          Type: Api
+          Properties:
+            Path: /auth/spotify/callback
+            Method: get
+            
+
+  SpotifyApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/spotify.handler
+      Environment:
+        Variables:
+          SPOTIFY_CLIENT_ID: !Ref SpotifyClientId
+          SPOTIFY_CLIENT_SECRET: !Ref SpotifyClientSecret
+          TOKENS_TABLE: !Ref SpotifyTokensTable
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource: !GetAtt SpotifyTokensTable.Arn
+      Events:
+        SpotifyApi:
+          Type: Api
+          Properties:
+            Path: /spotify/{proxy+}
+            Method: ANY
+            
+
+Parameters:
+  SpotifyClientId:
+    Type: String
+  SpotifyClientSecret:
+    Type: String
+  SpotifyRedirectUri:
+    Type: String
+  FrontendBaseUrl:
+    Type: String
+
+Outputs:
+  ApiUrl:
+    Description: "Base URL of API Gateway"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"

@@ -1,0 +1,10 @@
+.aws-sam
+.env.*
+node_modules
+dist
+build
+.vscode
+.DS_Store
+
+
+samconfig.toml
